@@ -12,6 +12,7 @@ import { TestInstructionsAnalyzer } from "./plugins/analyzers/test-instructions.
 import { LinearAnalyzer } from "./plugins/analyzers/linear.js";
 import { createServer } from "./server/app.js";
 import { prioritize } from "./pipeline/prioritization.js";
+import { StateStore } from "./core/persistence.js";
 import type { ServerConfig, PREvent } from "./core/types.js";
 
 const config: ServerConfig = {
@@ -43,6 +44,14 @@ async function main(): Promise<void> {
   const registry = new PluginRegistry();
   const eventBus = new EventBus();
   const aiClient = new ClaudeCodeClient();
+  const store = new StateStore();
+
+  // ── Load persisted state ──────────────────────────────────
+  const savedState = await store.load();
+  // Merge persisted repos with env repos (dedup)
+  const allRepos = [...new Set([...config.monitor.repos, ...savedState.repos])];
+  config.monitor.repos = allRepos;
+  console.log(`📂 Loaded state: ${savedState.queue.length} queue items, ${savedState.repos.length} saved repos`);
 
   // Register git provider
   const provider = new GitHubProvider();
@@ -69,6 +78,24 @@ async function main(): Promise<void> {
     analyzerConfigs: config.analyzers,
   });
   const sessions = new ReviewSessionManager(aiClient, provider, eventBus, config.repoClonePath);
+
+  // ── Restore queue items from persisted state ──────────────
+  if (savedState.queue.length > 0) {
+    queue.restoreItems(savedState.queue);
+    console.log(`   Restored ${savedState.queue.length} queue items`);
+  }
+
+  // ── Persist state on changes ──────────────────────────────
+  const persistState = (): void => {
+    store.save({
+      repos: config.monitor.repos,
+      queue: queue.getAll(),
+      sessions: [], // TODO: persist session metadata
+    });
+  };
+  eventBus.on("queue:updated", persistState);
+  eventBus.on("pr:analyzed", persistState);
+  eventBus.on("pr:artifact", persistState);
 
   // Wire up: monitor events → queue → pipeline (with concurrency control)
   const prEventHandler = async (event: PREvent): Promise<void> => {
@@ -122,6 +149,9 @@ async function main(): Promise<void> {
   const shutdown = async (): Promise<void> => {
     console.log("\nShutting down...");
     monitor.stop();
+    persistState();
+    await store.flush();
+    console.log("   State saved to disk");
     await registry.destroyAll();
     await app.close();
     process.exit(0);

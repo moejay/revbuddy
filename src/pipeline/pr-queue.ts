@@ -9,6 +9,13 @@ export class PRQueue {
 
   constructor(private eventBus: EventBus) {}
 
+  restoreItems(items: QueueItem[]): void {
+    for (const item of items) {
+      this.items.set(item.id, item);
+      this.prIndex.set(item.pr.id, item.id);
+    }
+  }
+
   enqueue(pr: PullRequest): QueueItem {
     // Dedup: if PR already in queue, re-queue it
     const existingId = this.prIndex.get(pr.id);

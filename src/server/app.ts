@@ -75,6 +75,7 @@ export function createServer(deps: ServerDeps) {
     }
     config.monitor.repos.push(repoId);
     monitor.addRepo(repoId);
+    eventBus.emit("queue:updated", queue.getAll()); // trigger persist
     return { ok: true, repoId };
   });
 
@@ -84,6 +85,7 @@ export function createServer(deps: ServerDeps) {
     if (idx === -1) return reply.code(404).send({ error: "Repo not found" });
     config.monitor.repos.splice(idx, 1);
     monitor.removeRepo(repoId);
+    eventBus.emit("queue:updated", queue.getAll()); // trigger persist
     return { ok: true, repoId };
   });
 

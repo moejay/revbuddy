@@ -3,6 +3,7 @@ import { Box, Text, useInput } from "ink";
 import { Panel } from "../components/Box.js";
 import { PriorityBadge } from "../components/PriorityBadge.js";
 import { StatusIndicator } from "../components/StatusIndicator.js";
+import { wrapText } from "../utils.js";
 import type { QueueItem } from "../../core/types.js";
 
 interface DetailViewProps {
@@ -21,9 +22,11 @@ export function DetailView({ item, cols, rows, onBack, onStartReview }: DetailVi
     : ["(no artifacts)"];
 
   const artifact = item.artifacts[activeTab];
-  const lines = artifact?.content.split("\n") ?? [];
-  // Header takes ~7 rows (header panel + tab bar), rest is for content
+  // Header takes ~7 rows (header panel + tab bar), content pane has borders (-2)
   const contentHeight = Math.max(rows - 9, 5);
+  // Wrap lines to actual pane width for accurate scroll
+  const paneWidth = cols - 4; // borders + padding
+  const lines = artifact ? wrapText(artifact.content, paneWidth) : [];
   const maxScroll = Math.max(0, lines.length - contentHeight);
 
   useInput((input, key) => {

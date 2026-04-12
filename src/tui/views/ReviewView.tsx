@@ -10,6 +10,7 @@ interface ChatEntry {
   content: string;
 }
 import type { APIClient } from "../api-client.js";
+import { wrapText } from "../utils.js";
 
 interface ReviewViewProps {
   item: QueueItem;
@@ -23,26 +24,6 @@ interface ReviewViewProps {
 
 // Three focus modes: artifacts, chat (scrollable history), input (typing)
 type FocusMode = "artifacts" | "chat" | "input";
-
-function wrapText(text: string, width: number): string[] {
-  const result: string[] = [];
-  for (const line of text.split("\n")) {
-    if (line.length <= width) {
-      result.push(line);
-    } else {
-      let remaining = line;
-      while (remaining.length > width) {
-        // Try to break at a space
-        let breakAt = remaining.lastIndexOf(" ", width);
-        if (breakAt <= 0) breakAt = width;
-        result.push(remaining.slice(0, breakAt));
-        remaining = remaining.slice(breakAt).trimStart();
-      }
-      if (remaining) result.push(remaining);
-    }
-  }
-  return result;
-}
 
 export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onEnd }: ReviewViewProps): React.ReactElement {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
@@ -63,9 +44,11 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onE
   const inputAreaHeight = Math.min(inputHeight, 5) + 1; // +1 for prompt line
   const chatHeight = Math.max(paneHeight - inputAreaHeight - 3, 4); // -3 for panel borders+title
 
-  // Artifact scrolling
-  const artifactLines = artifact?.content.split("\n") ?? [];
-  const maxArtifactScroll = Math.max(0, artifactLines.length - (paneHeight - 2));
+  // Artifact scrolling — wrap to actual pane width for accurate line count
+  const artifactPaneWidth = halfWidth - 4; // borders + padding
+  const artifactVisibleHeight = paneHeight - 2; // panel borders
+  const artifactLines = artifact ? wrapText(artifact.content, artifactPaneWidth) : [];
+  const maxArtifactScroll = Math.max(0, artifactLines.length - artifactVisibleHeight);
 
   // Chat lines: wrap entries to fit the chat pane width
   const chatPaneWidth = (cols - halfWidth) - 6;
@@ -282,8 +265,8 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onE
             {i === activeTab ? `▸${tab}` : tab}
           </Text>
         ))}
-        {focus === "artifacts" && artifactLines.length > (paneHeight - 2) && (
-          <Text dimColor> [{artifactScroll + 1}-{Math.min(artifactScroll + paneHeight - 2, artifactLines.length)}/{artifactLines.length}]</Text>
+        {focus === "artifacts" && artifactLines.length > artifactVisibleHeight && (
+          <Text dimColor> [{artifactScroll + 1}-{Math.min(artifactScroll + artifactVisibleHeight, artifactLines.length)}/{artifactLines.length}]</Text>
         )}
       </Box>
 
@@ -298,7 +281,7 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onE
           >
             {artifact ? (
               <Text>
-                {artifactLines.slice(artifactScroll, artifactScroll + paneHeight - 2).join("\n")}
+                {artifactLines.slice(artifactScroll, artifactScroll + artifactVisibleHeight).join("\n")}
               </Text>
             ) : (
               <Text dimColor>No artifacts</Text>
