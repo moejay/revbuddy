@@ -105,6 +105,27 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onE
   const effectiveChatScroll = chatScroll ?? maxChatScroll;
   const visibleChatLines = allChatLines.slice(effectiveChatScroll, effectiveChatScroll + chatHeight);
 
+  // Load existing chat history when entering the session
+  useEffect(() => {
+    const loadHistory = async (): Promise<void> => {
+      try {
+        const session = await api.getSession(sessionId);
+        if (session?.messages?.length) {
+          const restored: ChatEntry[] = [];
+          for (const msg of session.messages) {
+            if (msg.role === "user") {
+              restored.push({ type: "user", content: msg.content });
+            } else if (msg.role === "assistant") {
+              restored.push({ type: "ai-text", content: msg.content });
+            }
+          }
+          setEntries(restored);
+        }
+      } catch {}
+    };
+    loadHistory();
+  }, [sessionId]);
+
   // Update input height based on content
   useEffect(() => {
     const lines = chatInput.split("\n").length;

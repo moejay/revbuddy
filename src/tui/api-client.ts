@@ -63,6 +63,10 @@ export class APIClient {
     await this.fetch(`/queue/${itemId}/review`, { method: "DELETE" });
   }
 
+  async getSession(sessionId: string): Promise<any> {
+    return this.fetch(`/sessions/${sessionId}`);
+  }
+
   async sendChat(sessionId: string, message: string): Promise<string> {
     const res = await this.fetch<{ response: string }>(`/sessions/${sessionId}/chat`, {
       method: "POST",
