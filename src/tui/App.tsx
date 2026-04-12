@@ -58,6 +58,11 @@ export function App({ serverUrl }: AppProps): React.ReactElement {
     }
   };
 
+  const handleLeaveReview = (): void => {
+    // Navigate back to queue without destroying the session
+    setView("queue");
+  };
+
   const handleEndReview = async (): Promise<void> => {
     if (selectedItem) {
       try {
@@ -65,6 +70,7 @@ export function App({ serverUrl }: AppProps): React.ReactElement {
       } catch {}
     }
     setSessionId(null);
+    setWorktreePath(null);
     setView("queue");
   };
 
@@ -135,7 +141,8 @@ export function App({ serverUrl }: AppProps): React.ReactElement {
             api={api}
             cols={cols}
             rows={rows - 2}
-            onEnd={handleEndReview}
+            onLeave={handleLeaveReview}
+            onEndReview={handleEndReview}
           />
         )}
       </Box>

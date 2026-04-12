@@ -19,13 +19,14 @@ interface ReviewViewProps {
   api: APIClient;
   cols: number;
   rows: number;
-  onEnd: () => void;
+  onLeave: () => void;
+  onEndReview: () => void;
 }
 
 // Three focus modes: artifacts, chat (scrollable history), input (typing)
 type FocusMode = "artifacts" | "chat" | "input";
 
-export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onEnd }: ReviewViewProps): React.ReactElement {
+export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onLeave, onEndReview }: ReviewViewProps): React.ReactElement {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -165,7 +166,7 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onE
   };
 
   // Global keys (always active)
-  useInput((_input, key) => {
+  useInput((input, key) => {
     if (key.tab) {
       cycleFocus();
     }
@@ -173,8 +174,12 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onE
       if (focus === "artifacts" || focus === "chat") {
         setFocus("input");
       } else {
-        onEnd();
+        onLeave(); // go back to queue, keep session alive
       }
+    }
+    // Shift+E = end review (destroy session, mark reviewed)
+    if (input === "E" && focus !== "input") {
+      onEndReview();
     }
   });
 
@@ -236,8 +241,8 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onE
 
   // Focus indicator text
   const focusHints: Record<FocusMode, string> = {
-    artifacts: "h/l tabs · j/k scroll · g/G top/bottom",
-    chat: "j/k scroll history · G follow · g top",
+    artifacts: "h/l tabs · j/k scroll · g/G top/bottom · E end review",
+    chat: "j/k scroll history · G follow · g top · E end review",
     input: "type message · Enter send",
   };
 
@@ -251,7 +256,7 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onE
           )}
           <Box flexDirection="row" justifyContent="space-between">
             <Text dimColor>
-              Tab cycle focus · Esc {focus !== "input" ? "→ input" : "end review"}
+              Tab cycle focus · Esc {focus !== "input" ? "→ input" : "back to queue"}
             </Text>
             <Text color="cyan">[{focus}] {focusHints[focus]}</Text>
           </Box>
