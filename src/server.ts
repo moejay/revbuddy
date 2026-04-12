@@ -15,7 +15,7 @@ import { prioritize } from "./pipeline/prioritization.js";
 import type { ServerConfig, PREvent } from "./core/types.js";
 
 const config: ServerConfig = {
-  port: Number(process.env.REVBUDDY_PORT) || 3333,
+  port: Number(process.env.REVBUDDY_PORT) || 4455,
   monitor: {
     pollIntervalMs: Number(process.env.REVBUDDY_POLL_INTERVAL) || 60000,
     repos: (process.env.REVBUDDY_REPOS || "").split(",").filter(Boolean),

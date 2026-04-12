@@ -5,7 +5,7 @@ export class APIClient {
   private ws: WebSocket | null = null;
   private eventHandlers = new Map<string, Set<(data: unknown) => void>>();
 
-  constructor(serverUrl: string = "http://localhost:3333") {
+  constructor(serverUrl: string = "http://localhost:4455") {
     this.baseUrl = serverUrl;
   }
 
