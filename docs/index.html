@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RevBuddy - Your PR queue is a cry for help</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@400;600;700&display=swap');
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --border: #1e1e2e;
+      --text: #cdd6f4;
+      --dim: #6c7086;
+      --cyan: #89dceb;
+      --green: #a6e3a1;
+      --red: #f38ba8;
+      --yellow: #f9e2af;
+      --magenta: #cba6f7;
+      --blue: #89b4fa;
+      --orange: #fab387;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Grotesk', sans-serif;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    .container { max-width: 900px; margin: 0 auto; padding: 0 2rem; }
+
+    /* Hero */
+    .hero {
+      padding: 6rem 0 4rem;
+      text-align: center;
+      position: relative;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 50%;
+      transform: translateX(-50%);
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(137,220,235,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero h1 {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 3.5rem;
+      font-weight: 700;
+      color: var(--cyan);
+      margin-bottom: 0.5rem;
+    }
+
+    .hero h1 span { color: var(--dim); }
+
+    .tagline {
+      font-size: 1.3rem;
+      color: var(--dim);
+      max-width: 600px;
+      margin: 0 auto 2rem;
+    }
+
+    .tagline em {
+      color: var(--yellow);
+      font-style: normal;
+    }
+
+    /* Terminal block */
+    .terminal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 2rem auto;
+      max-width: 700px;
+      text-align: left;
+    }
+
+    .terminal-bar {
+      background: var(--border);
+      padding: 8px 16px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .terminal-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+    }
+
+    .terminal-dot.red { background: var(--red); }
+    .terminal-dot.yellow { background: var(--yellow); }
+    .terminal-dot.green { background: var(--green); }
+
+    .terminal-body {
+      padding: 1.5rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      line-height: 1.8;
+      color: var(--dim);
+    }
+
+    .terminal-body .prompt { color: var(--green); }
+    .terminal-body .cmd { color: var(--text); }
+    .terminal-body .comment { color: var(--dim); font-style: italic; }
+    .terminal-body .output { color: var(--cyan); }
+    .terminal-body .warn { color: var(--yellow); }
+    .terminal-body .crit { color: var(--red); }
+
+    /* Rant section */
+    .rant {
+      padding: 4rem 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .rant h2 {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--red);
+      font-size: 1.8rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .rant p {
+      color: var(--dim);
+      font-size: 1.05rem;
+      margin-bottom: 1rem;
+      max-width: 700px;
+    }
+
+    .rant p strong { color: var(--text); }
+
+    /* Features */
+    .features {
+      padding: 4rem 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .features h2 {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--green);
+      font-size: 1.8rem;
+      margin-bottom: 2rem;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      transition: border-color 0.2s;
+    }
+
+    .feature-card:hover { border-color: var(--cyan); }
+
+    .feature-card h3 {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--cyan);
+      font-size: 0.95rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .feature-card p {
+      color: var(--dim);
+      font-size: 0.9rem;
+    }
+
+    /* Architecture */
+    .arch {
+      padding: 4rem 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .arch h2 {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--magenta);
+      font-size: 1.8rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .arch pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--dim);
+      line-height: 1.6;
+    }
+
+    /* CTA */
+    .cta {
+      padding: 4rem 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+
+    .cta h2 {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--yellow);
+      font-size: 1.8rem;
+      margin-bottom: 1rem;
+    }
+
+    .cta p { color: var(--dim); margin-bottom: 2rem; }
+
+    .cta a {
+      display: inline-block;
+      background: var(--cyan);
+      color: var(--bg);
+      padding: 0.8rem 2rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      transition: opacity 0.2s;
+    }
+
+    .cta a:hover { opacity: 0.85; }
+
+    .footer {
+      padding: 2rem 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--dim);
+      font-size: 0.85rem;
+    }
+
+    .footer a { color: var(--cyan); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <section class="hero">
+    <h1>RevBuddy<span>_</span></h1>
+    <p class="tagline">
+      Your PR queue is a <em>cry for help</em>.<br>
+      This is the help.
+    </p>
+
+    <div class="terminal">
+      <div class="terminal-bar">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+      </div>
+      <div class="terminal-body">
+        <span class="prompt">$</span> <span class="cmd">revbuddy</span><br>
+        <span class="output">&#9556;&#9552;&#9552; RevBuddy &#9552;&#9552;&#9559;</span><br>
+        <span class="output">&#9484;&#9472; PR Queue &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;</span><br>
+        <span class="crit">&nbsp; [CRIT] &#9679;</span> <span class="cmd">#117 feat: replace pgmq with Temporal</span><br>
+        <span class="warn">&nbsp; [HIGH] &#9679;</span> <span class="cmd">#119 Migrate job queue to Trigger.dev</span><br>
+        <span class="output">&nbsp; [MED ] &#9679;</span> <span class="cmd">#3 Add puzzles 8 and 9</span><br>
+        <span class="comment">&nbsp; [LOW ] &#9679; #106 API client and webhook endpoints</span><br>
+        <span class="output">&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span><br>
+        <br>
+        <span class="comment"># 4 AI analyzers already ran on each PR.</span><br>
+        <span class="comment"># Priority scored. Artifacts generated.</span><br>
+        <span class="comment"># Just press 'r' to review with an AI buddy.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="rant">
+    <h2>// the problem</h2>
+    <p>
+      You open GitHub. <strong>47 open PRs</strong>. Three of them are from a bot. One is a 64-file migration someone pushed at 4:47 PM on a Friday. You've been tagged as a reviewer on all of them. Your coffee is cold. Your will to live is room temperature.
+    </p>
+    <p>
+      You click into the first PR. 800 lines changed. No description. The branch name is <code>fix-stuff-v3-final-FINAL</code>. You scroll through the diff for 20 minutes. You leave a comment that says "LGTM" because you have lost the ability to feel.
+    </p>
+    <p>
+      <strong>RevBuddy exists because this is not okay.</strong>
+    </p>
+    <p>
+      It watches your repos. It analyzes every PR automatically &mdash; summary, deep code review, test plan, ticket alignment. It scores priority so you know what's actually on fire. And it gives you a terminal UI with an AI chat agent that <em>has actually read the code</em> so you can ask it "what's the risk here?" instead of squinting at diffs until your eyes bleed.
+    </p>
+  </section>
+
+  <section class="features">
+    <h2>// what it does</h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <h3>auto-analysis</h3>
+        <p>PRs are analyzed the moment they appear. 4 AI analyzers run in parallel with configurable concurrency. No manual triggering.</p>
+      </div>
+      <div class="feature-card">
+        <h3>priority scoring</h3>
+        <p>Critical security findings? Top of the queue. Tiny 2-file PR? Prioritized over the 800-line monstrosity. Old PRs get age boosts. Labels map to priority.</p>
+      </div>
+      <div class="feature-card">
+        <h3>interactive review</h3>
+        <p>Split-pane TUI: artifacts on the left, AI chat on the right. Claude runs inside the PR's worktree with full file access. Ask it anything.</p>
+      </div>
+      <div class="feature-card">
+        <h3>streaming chat</h3>
+        <p>Token-by-token streaming. See thinking blocks, tool invocations, and results in real-time. It's like pair-reviewing with someone who actually read the PR.</p>
+      </div>
+      <div class="feature-card">
+        <h3>persistent state</h3>
+        <p>Repos, queue items, artifacts, and chat history survive server restarts. Your progress is never lost.</p>
+      </div>
+      <div class="feature-card">
+        <h3>real-time updates</h3>
+        <p>WebSocket pushes queue changes, analysis progress, and chat streams. No polling, no refresh, no stale data.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="arch">
+    <h2>// how it works</h2>
+    <pre>
+  PR Monitor ──&#9654; PR Queue ──&#9654; Analysis Pipeline (concurrent)
+  (polling)      (8 states)    ├── Summary Analyzer
+                               ├── Code Review Analyzer
+                               ├── Test Instructions Analyzer
+                               └── Linear Ticket Analyzer
+                                         │
+                               Prioritization ◂── Artifacts
+                                         │
+                               Server API ◂──&#9654; TUI Client
+                             (REST + WebSocket)    (Ink)
+                                         │
+                               Review Session
+                             (worktree + AI chat)
+    </pre>
+  </section>
+
+  <section class="cta">
+    <h2>// get started</h2>
+    <p>Requires Node.js 18+, <code>gh</code> CLI (authenticated), and <code>claude</code> CLI.</p>
+    <a href="https://github.com/moejay/revbuddy">View on GitHub</a>
+  </section>
+
+  <div class="footer">
+    Built with frustration and <a href="https://claude.ai">Claude</a>. MIT License.
+  </div>
+
+</div>
+
+</body>
+</html>
