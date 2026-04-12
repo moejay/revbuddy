@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "skills": {
+    "modspec": {
+      "source": "moejay/modspec",
+      "sourceType": "github",
+      "computedHash": "d6baa494cadaf3166cb2c7c658d106bec90717f852e5ac3bf3c67bac8a5dd1f5"
+    },
+    "modspec-fix": {
+      "source": "moejay/modspec",
+      "sourceType": "github",
+      "computedHash": "4e2982f074b6b36b4b005261d313d71c20b95678959e1c6348c0e7c332b494cc"
+    },
+    "modspec-implement": {
+      "source": "moejay/modspec",
+      "sourceType": "github",
+      "computedHash": "4616a8fbf8609212b6ef7ed4f351d24d465fcf487f69e011fe31f015d662fabc"
+    },
+    "modspec-init": {
+      "source": "moejay/modspec",
+      "sourceType": "github",
+      "computedHash": "6005c70ca6d33d2b73a4fde0b55b9019ed4e10a84243c7d2447a1f4a77fbed95"
+    },
+    "wrightty": {
+      "source": "moejay/wrightty",
+      "sourceType": "github",
+      "computedHash": "19467ab95f3f24a9f7753769f89de8d6dc8133d466bddf5d7e9de11c05df8656"
+    }
+  }
+}
