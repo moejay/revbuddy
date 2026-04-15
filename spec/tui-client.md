@@ -18,6 +18,10 @@ First client implementation. Terminal-based UI with hacker-modern aesthetic. Con
 ### Queue View
 - PR list grouped by repo, ordered by priority
 - Priority tier color coding (red/orange/blue/gray)
+- PR number rendered as clickable terminal hyperlink (OSC 8) to GitHub PR URL
+- `b` shortcut opens selected PR in default browser
+- Closed/merged PRs shown with dimmed/strikethrough styling and time-since-closed
+- Closed PRs sorted to bottom of their repo group
 - Analyzer status indicators per PR
 - Filter/search bar
 - Keyboard-driven navigation
@@ -25,7 +29,16 @@ First client implementation. Terminal-based UI with hacker-modern aesthetic. Con
 ### PR Detail View
 - Artifact tabs (summary, review, tests, linear)
 - Rendered markdown in terminal
+- `b` shortcut opens PR in default browser
 - "Start Review" action
+
+### Diff View (tab in Detail/Review)
+- PR diff displayed with per-file collapsible sections
+- Color-coded: green additions, red deletions, blue hunk headers, dim context
+- Navigate files with j/k, expand/collapse with Enter/Space
+- `c` shortcut references selected file's diff in chat
+  - From Detail: starts review session with reference pre-filled in chat input
+  - From Review: pastes reference into chat input and focuses it
 
 ### Review Session View
 - Split pane: artifacts left, chat right

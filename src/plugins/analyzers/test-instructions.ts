@@ -19,6 +19,7 @@ export class TestInstructionsAnalyzer implements Analyzer {
     const diff = pr.diff ?? "";
 
     const response = await this.ai.complete({
+      signal: input.signal,
       systemPrompt: `You are a QA engineer. Generate step-by-step manual test instructions for verifying this PR's changes.
 
 Format:

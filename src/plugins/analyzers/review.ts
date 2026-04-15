@@ -19,6 +19,7 @@ export class ReviewAnalyzer implements Analyzer {
     const diff = pr.diff ?? "";
 
     const response = await this.ai.complete({
+      signal: input.signal,
       systemPrompt: `You are an expert code reviewer. Analyze the PR diff and produce a structured review with findings grouped by severity.
 
 Use these severity levels:

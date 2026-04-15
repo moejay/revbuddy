@@ -34,11 +34,29 @@ export class StateStore {
     try {
       const raw = await readFile(this.path, "utf-8");
       const state = JSON.parse(raw) as PersistedState;
-      // Reset any stuck "analyzing" items to "queued"
+      // Reset any stuck "analyzing" items to "queued" but keep partial artifacts
       for (const item of state.queue) {
         if (item.status === "analyzing" || item.status === "post-analyzing") {
+          console.log(`[Persistence] Resetting stuck item ${item.pr.repoId}#${item.pr.number} from "${item.status}" to "queued" (keeping ${item.artifacts.length} artifacts)`);
           item.status = "queued";
         }
+      }
+      // Remove closed items past 6hr retention
+      const retentionMs = 6 * 60 * 60 * 1000;
+      const now = Date.now();
+      const beforeCount = state.queue.length;
+      state.queue = state.queue.filter((item) => {
+        if (item.status === "closed" && item.closedAt) {
+          const age = now - new Date(item.closedAt).getTime();
+          if (age > retentionMs) {
+            console.log(`[Persistence] Removing expired closed item ${item.pr.repoId}#${item.pr.number} (closed ${Math.round(age / 3600000)}h ago)`);
+            return false;
+          }
+        }
+        return true;
+      });
+      if (state.queue.length < beforeCount) {
+        console.log(`[Persistence] Removed ${beforeCount - state.queue.length} expired closed item(s)`);
       }
       return state;
     } catch {

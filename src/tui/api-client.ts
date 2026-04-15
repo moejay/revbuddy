@@ -79,6 +79,11 @@ export class APIClient {
     return this.fetch("/repos");
   }
 
+  async getDiff(itemId: string): Promise<string> {
+    const res = await this.fetch<{ diff: string }>(`/queue/${itemId}/diff`);
+    return res.diff;
+  }
+
   async getAnalysisStatus(): Promise<any> {
     return this.fetch("/analysis/status");
   }

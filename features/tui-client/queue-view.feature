@@ -29,3 +29,30 @@ Feature: queue-view
     When the PR is displayed in the queue
     Then summary shows a check indicator
     And review shows a spinner indicator
+
+  Scenario: Display closed PR with visual distinction
+    Given PR #42 was closed 2 hours ago
+    When the queue view renders
+    Then PR #42 is shown with dimmed styling
+    And PR #42 shows "closed 2h ago" label
+    And PR #42 is sorted to the bottom of its repo group
+
+  Scenario: Display clickable PR link in queue row
+    Given a PR #42 with URL "https://github.com/org/repo/pull/42"
+    When the PR is displayed in the queue
+    Then the PR number is rendered as a clickable terminal hyperlink to the PR URL
+
+  Scenario: Open PR in browser from queue
+    Given the queue view is active with cursor on PR #42
+    When the user presses "b"
+    Then PR #42 opens in the default browser
+
+  Scenario: Open PR in browser from detail view
+    Given the detail view is showing PR #42
+    When the user presses "b"
+    Then PR #42 opens in the default browser
+
+  Scenario: Closed PR disappears after retention window
+    Given PR #42 was closed 7 hours ago
+    When the queue view renders
+    Then PR #42 is not shown in the queue

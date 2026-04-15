@@ -60,7 +60,7 @@ export class GitHubProvider implements GitProvider {
     const json = await gh([
       "pr", "view", String(prNumber),
       "--repo", repoId,
-      "--json", "number,title,author,headRefName,baseRefName,body,labels,state,url,createdAt,updatedAt,headRefOid,additions,deletions,changedFiles",
+      "--json", "number,title,author,headRefName,baseRefName,body,labels,state,url,createdAt,updatedAt,headRefOid,additions,deletions,changedFiles,isDraft",
     ]);
     const pr = JSON.parse(json);
     return this.mapPR(pr, repoId);
@@ -70,7 +70,7 @@ export class GitHubProvider implements GitProvider {
     const args = [
       "pr", "list",
       "--repo", repoId,
-      "--json", "number,title,author,headRefName,baseRefName,body,labels,state,url,createdAt,updatedAt,headRefOid,additions,deletions,changedFiles",
+      "--json", "number,title,author,headRefName,baseRefName,body,labels,state,url,createdAt,updatedAt,headRefOid,additions,deletions,changedFiles,isDraft",
       "--limit", "50",
     ];
     if (filters?.state) {
@@ -87,6 +87,10 @@ export class GitHubProvider implements GitProvider {
     let results = prs.map((pr: any) => this.mapPR(pr, repoId));
     if (filters?.authors?.length) {
       results = results.filter((pr: PullRequest) => filters.authors!.includes(pr.author));
+    }
+    // Exclude drafts by default
+    if (!filters?.includeDrafts) {
+      results = results.filter((pr: PullRequest) => !pr.draft);
     }
     return results;
   }
@@ -178,6 +182,7 @@ export class GitHubProvider implements GitProvider {
       additions: raw.additions ?? 0,
       deletions: raw.deletions ?? 0,
       changedFiles: raw.changedFiles ?? 0,
+      draft: raw.isDraft ?? false,
     };
   }
 }

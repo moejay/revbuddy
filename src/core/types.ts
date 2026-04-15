@@ -59,6 +59,7 @@ export interface PullRequest {
   additions: number;
   deletions: number;
   changedFiles: number;
+  draft: boolean;
   diff?: string;
 }
 
@@ -66,6 +67,7 @@ export interface PRFilter {
   labels?: string[];
   authors?: string[];
   state?: PRState;
+  includeDrafts?: boolean;
 }
 
 export interface GitProvider extends Plugin {
@@ -100,6 +102,7 @@ export interface AnalysisInput {
   localPath: string;
   repo: Repo;
   config: Record<string, unknown>;
+  signal?: AbortSignal;
 }
 
 export interface Analyzer extends Plugin {
@@ -129,7 +132,8 @@ export type QueueStatus =
   | "post-analyzing"
   | "ready"
   | "in-review"
-  | "reviewed";
+  | "reviewed"
+  | "closed";
 
 export type PriorityTier = "critical" | "high" | "medium" | "low";
 
@@ -142,6 +146,7 @@ export interface QueueItem {
   artifacts: Artifact[];
   enqueuedAt: string;
   analyzedAt?: string;
+  closedAt?: string;
   reviewSessionId?: string;
 }
 
@@ -162,6 +167,7 @@ export interface AICompletionRequest {
   prompt: string;
   systemPrompt?: string;
   context?: Record<string, string>;
+  signal?: AbortSignal;
 }
 
 export interface AICompletionResponse {

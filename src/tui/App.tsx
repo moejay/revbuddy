@@ -21,6 +21,7 @@ export function App({ serverUrl }: AppProps): React.ReactElement {
   const [selectedItem, setSelectedItem] = useState<QueueItem | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [worktreePath, setWorktreePath] = useState<string | null>(null);
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [cols, setCols] = useState(stdout?.columns ?? 80);
   const [rows, setRows] = useState(stdout?.rows ?? 24);
 
@@ -58,8 +59,18 @@ export function App({ serverUrl }: AppProps): React.ReactElement {
     }
   };
 
+  const handleReviewWithRef = async (message: string): Promise<void> => {
+    if (!selectedItem) return;
+    setPendingMessage(message);
+    try {
+      await handleStartReview(selectedItem);
+    } catch {
+      setPendingMessage(null);
+    }
+  };
+
   const handleLeaveReview = (): void => {
-    // Navigate back to queue without destroying the session
+    setPendingMessage(null);
     setView("queue");
   };
 
@@ -71,10 +82,12 @@ export function App({ serverUrl }: AppProps): React.ReactElement {
     }
     setSessionId(null);
     setWorktreePath(null);
+    setPendingMessage(null);
     setView("queue");
   };
 
   const handleBack = (): void => {
+    setPendingMessage(null);
     setView("queue");
     setSelectedItem(null);
   };
@@ -126,10 +139,12 @@ export function App({ serverUrl }: AppProps): React.ReactElement {
         {view === "detail" && selectedItem && (
           <DetailView
             item={selectedItem}
+            api={api}
             cols={cols}
             rows={rows - 2}
             onBack={handleBack}
             onStartReview={() => handleStartReview(selectedItem)}
+            onReviewWithRef={handleReviewWithRef}
           />
         )}
 
@@ -143,6 +158,7 @@ export function App({ serverUrl }: AppProps): React.ReactElement {
             rows={rows - 2}
             onLeave={handleLeaveReview}
             onEndReview={handleEndReview}
+            initialMessage={pendingMessage ?? undefined}
           />
         )}
       </Box>

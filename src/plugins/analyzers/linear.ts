@@ -42,6 +42,7 @@ export class LinearAnalyzer implements Analyzer {
 
     const diff = pr.diff ?? "";
     const response = await this.ai.complete({
+      signal: input.signal,
       systemPrompt: `You are a project manager analyzing PR alignment with a ticket.
 
 Output format:

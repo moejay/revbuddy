@@ -1,10 +1,22 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Box, Text, useInput, useApp } from "ink";
 import { Panel } from "../components/Box.js";
 import { PriorityBadge } from "../components/PriorityBadge.js";
 import { StatusIndicator } from "../components/StatusIndicator.js";
 import type { QueueItem } from "../../core/types.js";
 import type { APIClient } from "../api-client.js";
+import { terminalLink, openInBrowser } from "../utils.js";
+
+function formatTimeAgo(isoDate: string): string {
+  const ms = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+type SortMode = "priority" | "age";
 
 interface QueueViewProps {
   api: APIClient;
@@ -16,28 +28,59 @@ interface QueueViewProps {
   onAnalysisStatus: () => void;
 }
 
+function sortItems(items: QueueItem[], mode: SortMode): QueueItem[] {
+  return [...items].sort((a, b) => {
+    // Closed always at bottom
+    if (a.status === "closed" && b.status !== "closed") return 1;
+    if (a.status !== "closed" && b.status === "closed") return -1;
+    if (mode === "age") {
+      return new Date(a.pr.createdAt).getTime() - new Date(b.pr.createdAt).getTime();
+    }
+    return b.priorityScore - a.priorityScore;
+  });
+}
+
+function groupByRepo(items: QueueItem[], mode: SortMode): Record<string, QueueItem[]> {
+  const groups: Record<string, QueueItem[]> = {};
+  for (const item of items) {
+    const repo = item.pr.repoId;
+    if (!groups[repo]) groups[repo] = [];
+    groups[repo].push(item);
+  }
+  for (const repo of Object.keys(groups)) {
+    groups[repo] = sortItems(groups[repo], mode);
+  }
+  return groups;
+}
+
 export function QueueView({ api, cols, rows, onSelectItem, onStartReview, onManageRepos, onAnalysisStatus }: QueueViewProps): React.ReactElement {
   const { exit } = useApp();
-  const [grouped, setGrouped] = useState<Record<string, QueueItem[]>>({});
+  const [allItems, setAllItems] = useState<QueueItem[]>([]);
   const [cursor, setCursor] = useState(0);
   const [filter, setFilter] = useState("");
   const [filterMode, setFilterMode] = useState(false);
+  const [sortMode, setSortMode] = useState<SortMode>("priority");
   const [error, setError] = useState<string | null>(null);
 
-  const flatItems = Object.values(grouped).flat();
-  const filteredItems = filter
-    ? flatItems.filter(
-        (i) =>
-          i.pr.title.toLowerCase().includes(filter.toLowerCase()) ||
-          i.priorityTier.includes(filter.toLowerCase())
-      )
-    : flatItems;
+  const grouped = useMemo(() => groupByRepo(allItems, sortMode), [allItems, sortMode]);
+
+  const flatItems = useMemo(() => Object.values(grouped).flat(), [grouped]);
+  const filteredItems = useMemo(() =>
+    filter
+      ? flatItems.filter(
+          (i) =>
+            i.pr.title.toLowerCase().includes(filter.toLowerCase()) ||
+            i.priorityTier.includes(filter.toLowerCase())
+        )
+      : flatItems,
+    [flatItems, filter]
+  );
 
   useEffect(() => {
     const load = async (): Promise<void> => {
       try {
-        const data = await api.getQueueGrouped();
-        setGrouped(data);
+        const data = await api.getQueue();
+        setAllItems(data);
       } catch (err: any) {
         setError(err.message);
       }
@@ -66,8 +109,15 @@ export function QueueView({ api, cols, rows, onSelectItem, onStartReview, onMana
     if (input === "j" || key.downArrow) setCursor((c) => Math.min(c + 1, filteredItems.length - 1));
     if (input === "k" || key.upArrow) setCursor((c) => Math.max(c - 1, 0));
     if (input === "/") setFilterMode(true);
+    if (input === "o") setSortMode((m) => m === "priority" ? "age" : "priority");
     if (key.return && filteredItems[cursor]) onSelectItem(filteredItems[cursor]);
     if (input === "r" && filteredItems[cursor]) onStartReview(filteredItems[cursor]);
+    if (input === "a" && filteredItems[cursor]) {
+      api.startAnalysis(filteredItems[cursor].id).catch(() => {});
+    }
+    if (input === "b" && filteredItems[cursor]) {
+      openInBrowser(filteredItems[cursor].pr.url);
+    }
     if (input === "m") onManageRepos();
     if (input === "s") onAnalysisStatus();
   });
@@ -90,8 +140,9 @@ export function QueueView({ api, cols, rows, onSelectItem, onStartReview, onMana
         <Panel title="PR Queue" focused>
           <Box flexDirection="row" justifyContent="space-between">
             <Text dimColor>
-              {filteredItems.length} PRs · j/k nav · Enter detail · r review · s status · m repos · / filter · q quit
+              {filteredItems.length} PRs · j/k nav · Enter detail · r review · a analyze · b browser · o sort · s status · m repos · / filter · q quit
             </Text>
+            <Text color="yellow"> sort: {sortMode}</Text>
             {filterMode && (
               <Text>
                 Filter: <Text color="cyan">{filter}</Text>
@@ -119,19 +170,23 @@ export function QueueView({ api, cols, rows, onSelectItem, onStartReview, onMana
                 {visible.map((item) => {
                   const globalIdx = filteredItems.indexOf(item);
                   const selected = globalIdx === cursor;
+                  const isClosed = item.status === "closed";
+                  const closedAge = isClosed && item.closedAt ? formatTimeAgo(item.closedAt) : "";
                   return (
                     <Box key={item.id} flexDirection="row" gap={1}>
                       <Text>{selected ? "▸" : " "}</Text>
                       <PriorityBadge tier={item.priorityTier} />
                       <StatusIndicator status={item.status} />
-                      <Text bold={selected} color={selected ? "cyan" : "white"}>
-                        #{item.pr.number}
+                      <Text bold={selected && !isClosed} dimColor={isClosed} color={isClosed ? "gray" : selected ? "cyan" : "white"}>
+                        {terminalLink(`#${item.pr.number}`, item.pr.url)}
                       </Text>
-                      <Text bold={selected} color={selected ? "cyan" : "white"} wrap="truncate-end">
+                      <Text bold={selected && !isClosed} dimColor={isClosed} color={isClosed ? "gray" : selected ? "cyan" : "white"} wrap="truncate-end">
                         {item.pr.title}
                       </Text>
                       <Text dimColor>
-                        {item.pr.author} · {item.artifacts.length} artifacts
+                        {isClosed
+                          ? `closed ${closedAge}`
+                          : `${item.pr.author} · ${formatTimeAgo(item.pr.createdAt)} · ${item.artifacts.length} artifacts`}
                       </Text>
                     </Box>
                   );

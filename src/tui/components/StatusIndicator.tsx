@@ -11,6 +11,7 @@ const STATUS_ICONS: Record<QueueStatus, { icon: string; color: string }> = {
   ready: { icon: "●", color: "green" },
   "in-review": { icon: "◆", color: "#FFA500" },
   reviewed: { icon: "✓", color: "green" },
+  closed: { icon: "✕", color: "gray" },
 };
 
 export function StatusIndicator({ status }: { status: QueueStatus }): React.ReactElement {

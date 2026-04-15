@@ -17,12 +17,14 @@ export class PRQueue {
   }
 
   enqueue(pr: PullRequest): QueueItem {
-    // Dedup: if PR already in queue, re-queue it
+    // Dedup: if PR already in queue, only re-analyze if PR actually changed
     const existingId = this.prIndex.get(pr.id);
     if (existingId) {
       const existing = this.items.get(existingId)!;
+      const changed = existing.pr.headSha !== pr.headSha;
       existing.pr = pr;
-      if (existing.status === "analyzed" || existing.status === "ready" || existing.status === "reviewed") {
+      if (changed && (existing.status === "analyzed" || existing.status === "ready" || existing.status === "reviewed")) {
+        console.log(`[Queue] PR ${pr.repoId}#${pr.number} SHA changed (${existing.pr.headSha?.slice(0, 7)} → ${pr.headSha?.slice(0, 7)}), re-queuing`);
         existing.status = "queued";
         existing.artifacts = [];
         existing.analyzedAt = undefined;
@@ -95,9 +97,13 @@ export class PRQueue {
       if (!groups[repo]) groups[repo] = [];
       groups[repo].push(item);
     }
-    // Sort within each group by priority score desc
+    // Sort: closed items to bottom, then by priority score desc
     for (const items of Object.values(groups)) {
-      items.sort((a, b) => b.priorityScore - a.priorityScore);
+      items.sort((a, b) => {
+        if (a.status === "closed" && b.status !== "closed") return 1;
+        if (a.status !== "closed" && b.status === "closed") return -1;
+        return b.priorityScore - a.priorityScore;
+      });
     }
     return groups;
   }
@@ -105,6 +111,41 @@ export class PRQueue {
   getNextQueued(): QueueItem | undefined {
     return this.getByStatus("queued")
       .sort((a, b) => b.priorityScore - a.priorityScore)[0];
+  }
+
+  close(prId: string): void {
+    const itemId = this.prIndex.get(prId);
+    if (!itemId) return;
+    const item = this.items.get(itemId)!;
+    if (item.status === "closed") return; // already closed, keep original closedAt
+    console.log(`[Queue] Closing PR ${item.pr.repoId}#${item.pr.number} (was "${item.status}")`);
+    item.status = "closed";
+    item.closedAt = new Date().toISOString();
+    this.eventBus.emit("queue:updated", this.getAll());
+  }
+
+  /**
+   * Remove closed items older than retentionMs (default 6 hours).
+   * Returns number of items removed.
+   */
+  cleanupExpired(retentionMs: number = 6 * 60 * 60 * 1000): number {
+    const now = Date.now();
+    let removed = 0;
+    for (const [id, item] of this.items) {
+      if (item.status === "closed" && item.closedAt) {
+        const age = now - new Date(item.closedAt).getTime();
+        if (age > retentionMs) {
+          this.prIndex.delete(item.pr.id);
+          this.items.delete(id);
+          removed++;
+        }
+      }
+    }
+    if (removed > 0) {
+      console.log(`[Queue] Cleaned up ${removed} expired closed item(s)`);
+      this.eventBus.emit("queue:updated", this.getAll());
+    }
+    return removed;
   }
 
   remove(itemId: string): void {

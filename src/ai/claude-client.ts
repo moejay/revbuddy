@@ -20,9 +20,10 @@ export class ClaudeCodeClient implements AIClient {
         .join("\n\n");
       prompt = `${contextStr}\n\n${prompt}`;
     }
-    args.push(prompt);
+    // Pipe prompt via stdin instead of CLI arg — avoids arg length issues
+    // and ensures stdin gets closed properly
 
-    const raw = await this.runClaude(args);
+    const raw = await this.runClaude(args, prompt, request.signal);
     try {
       const parsed = JSON.parse(raw);
       return { text: parsed.result ?? raw };
@@ -120,24 +121,72 @@ export class ClaudeCodeClient implements AIClient {
     this.sessions.delete(sessionId);
   }
 
-  private runClaude(args: string[]): Promise<string> {
+  private runClaude(args: string[], stdinData?: string, signal?: AbortSignal): Promise<string> {
     return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new Error("Aborted before spawn"));
+        return;
+      }
+
+      const startMs = Date.now();
+      const promptLen = stdinData?.length ?? 0;
+      console.log(`[Claude] Spawning: claude ${args.join(" ")} (prompt via stdin: ${promptLen} chars)`);
+
       const proc = spawn("claude", args, {
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env },
       });
+      const pidTag = `[Claude pid:${proc.pid}]`;
+      console.log(`${pidTag} Process started`);
+
+      // Write prompt to stdin and close it — critical so claude doesn't hang waiting for input
+      if (stdinData) {
+        proc.stdin.write(stdinData);
+      }
+      proc.stdin.end();
+
+      // Kill child process on abort
+      const onAbort = () => {
+        console.warn(`${pidTag} Aborted — killing process (ran ${Date.now() - startMs}ms)`);
+        proc.kill("SIGTERM");
+        setTimeout(() => {
+          if (proc.exitCode === null) {
+            console.warn(`${pidTag} SIGTERM ignored, sending SIGKILL`);
+            proc.kill("SIGKILL");
+          }
+        }, 5000);
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
       proc.stdout.on("data", (d) => stdout.push(d));
-      proc.stderr.on("data", (d) => stderr.push(d));
-      proc.on("close", (code) => {
-        if (code !== 0) {
-          reject(new Error(`claude exited ${code}: ${Buffer.concat(stderr).toString()}`));
+      proc.stderr.on("data", (d) => {
+        stderr.push(d);
+        // Log stderr in real-time so we can see what claude is doing
+        const msg = d.toString().trim();
+        if (msg) console.log(`${pidTag} stderr: ${msg.slice(0, 300)}`);
+      });
+      proc.on("close", (code, sig) => {
+        signal?.removeEventListener("abort", onAbort);
+        const elapsed = Date.now() - startMs;
+        if (signal?.aborted) {
+          reject(new Error(`claude process killed (signal: ${sig}, after ${elapsed}ms)`));
+        } else if (code !== 0) {
+          const stderrStr = Buffer.concat(stderr).toString();
+          console.error(`${pidTag} Exited with code ${code} after ${elapsed}ms: ${stderrStr.slice(0, 500)}`);
+          reject(new Error(`claude exited ${code}: ${stderrStr}`));
         } else {
-          resolve(Buffer.concat(stdout).toString().trim());
+          const out = Buffer.concat(stdout).toString().trim();
+          console.log(`${pidTag} Completed in ${elapsed}ms (${out.length} chars output)`);
+          resolve(out);
         }
       });
-      proc.on("error", reject);
+      proc.on("error", (err) => {
+        signal?.removeEventListener("abort", onAbort);
+        console.error(`${pidTag} Spawn error: ${err.message}`);
+        reject(err);
+      });
     });
   }
 

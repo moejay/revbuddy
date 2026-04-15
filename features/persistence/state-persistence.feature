@@ -24,6 +24,17 @@ Feature: state-persistence
     Then the session messages are preserved
     But the AI session must be re-initialized
 
+  Scenario: Closed PRs are persisted with closedAt timestamp
+    Given PR #42 is in the queue with status "closed" and closedAt "2026-04-13T10:00:00Z"
+    When the server is restarted
+    Then PR #42 is still in the queue with status "closed"
+    And PR #42 closedAt is preserved
+
+  Scenario: Expired closed PRs are cleaned up on load
+    Given PR #42 was closed more than 6 hours ago in persisted state
+    When the server loads state
+    Then PR #42 is removed from the queue
+
   Scenario: State file is created on first mutation
     Given no state file exists
     When a repo is added

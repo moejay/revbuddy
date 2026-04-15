@@ -1,16 +1,18 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import { Panel } from "../components/Box.js";
+import { DiffView } from "../components/DiffView.js";
 import type { QueueItem } from "../../core/types.js";
 
-// Rich chat entry that can represent user messages, AI text, tool use, thinking
 interface ChatEntry {
   type: "user" | "ai-text" | "tool-use" | "tool-result" | "thinking";
   content: string;
 }
+
 import type { APIClient } from "../api-client.js";
-import { wrapText } from "../utils.js";
+import { wrapText, renderMarkdown, parseDiff } from "../utils.js";
+import type { DiffFile } from "../utils.js";
 
 interface ReviewViewProps {
   item: QueueItem;
@@ -21,37 +23,37 @@ interface ReviewViewProps {
   rows: number;
   onLeave: () => void;
   onEndReview: () => void;
+  initialMessage?: string;
 }
 
-// Three focus modes: artifacts, chat (scrollable history), input (typing)
 type FocusMode = "artifacts" | "chat" | "input";
 
-export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onLeave, onEndReview }: ReviewViewProps): React.ReactElement {
+export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onLeave, onEndReview, initialMessage }: ReviewViewProps): React.ReactElement {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [focus, setFocus] = useState<FocusMode>("input");
   const [artifactScroll, setArtifactScroll] = useState(0);
-  const [chatScroll, setChatScroll] = useState<number | null>(null); // null = auto-follow
+  const [chatScroll, setChatScroll] = useState<number | null>(null);
   const [inputHeight, setInputHeight] = useState(1);
+  const [diffFiles, setDiffFiles] = useState<DiffFile[]>([]);
 
-  const tabs = item.artifacts.map((a) => a.title);
-  const artifact = item.artifacts[activeTab];
+  const artifactTabs = item.artifacts.map((a) => a.title);
+  const tabs = artifactTabs.length > 0 ? [...artifactTabs, "Diff"] : ["Diff"];
+  const isDiffTab = activeTab === tabs.length - 1;
+  const artifact = isDiffTab ? null : item.artifacts[activeTab];
+
   const halfWidth = Math.floor(cols / 2);
-  // Layout: header=4, tab bar=1, so pane area = rows - 5
   const paneHeight = Math.max(rows - 5, 8);
-  // Right pane: chat area + input area (input is 2 + inputHeight lines)
-  const inputAreaHeight = Math.min(inputHeight, 5) + 1; // +1 for prompt line
-  const chatHeight = Math.max(paneHeight - inputAreaHeight - 3, 4); // -3 for panel borders+title
+  const inputAreaHeight = Math.min(inputHeight, 5) + 1;
+  const chatHeight = Math.max(paneHeight - inputAreaHeight - 3, 4);
 
-  // Artifact scrolling — wrap to actual pane width for accurate line count
-  const artifactPaneWidth = halfWidth - 4; // borders + padding
-  const artifactVisibleHeight = paneHeight - 2; // panel borders
-  const artifactLines = artifact ? wrapText(artifact.content, artifactPaneWidth) : [];
+  const artifactPaneWidth = halfWidth - 4;
+  const artifactVisibleHeight = paneHeight - 2;
+  const artifactLines = artifact ? renderMarkdown(artifact.content, artifactPaneWidth) : [];
   const maxArtifactScroll = Math.max(0, artifactLines.length - artifactVisibleHeight);
 
-  // Chat lines: wrap entries to fit the chat pane width
   const chatPaneWidth = (cols - halfWidth) - 6;
   const allChatLines: Array<{ color: string; text: string }> = [];
   const entryColors: Record<ChatEntry["type"], string> = {
@@ -77,7 +79,7 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onL
       allChatLines.push({ color, text: line });
     }
     if (entry.type === "user" || entry.type === "ai-text") {
-      allChatLines.push({ color: "gray", text: "" }); // spacer after messages
+      allChatLines.push({ color: "gray", text: "" });
     }
   });
   if (loading && (entries.length === 0 || entries[entries.length - 1]?.type === "user")) {
@@ -85,11 +87,10 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onL
   }
 
   const maxChatScroll = Math.max(0, allChatLines.length - chatHeight);
-  // If chatScroll is null, auto-follow (show bottom)
   const effectiveChatScroll = chatScroll ?? maxChatScroll;
   const visibleChatLines = allChatLines.slice(effectiveChatScroll, effectiveChatScroll + chatHeight);
 
-  // Load existing chat history when entering the session
+  // Load existing chat history
   useEffect(() => {
     const loadHistory = async (): Promise<void> => {
       try {
@@ -110,6 +111,21 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onL
     loadHistory();
   }, [sessionId]);
 
+  // Pre-fill chat from diff reference
+  useEffect(() => {
+    if (initialMessage) {
+      setChatInput(initialMessage);
+      setFocus("input");
+    }
+  }, []);
+
+  // Fetch diff
+  useEffect(() => {
+    api.getDiff(item.id)
+      .then((diff) => setDiffFiles(parseDiff(diff)))
+      .catch(() => {});
+  }, [item.id]);
+
   // Update input height based on content
   useEffect(() => {
     const lines = chatInput.split("\n").length;
@@ -122,7 +138,6 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onL
       if (data.sessionId !== sessionId) return;
 
       if (data.type === "text") {
-        // Append text to the last ai-text entry, or create one
         setEntries((prev) => {
           const last = prev[prev.length - 1];
           if (last?.type === "ai-text") {
@@ -149,14 +164,12 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onL
     return () => { unsub(); };
   }, [sessionId]);
 
-  // Auto-follow: reset to null (follow mode) when new messages arrive and we're in follow mode
   useEffect(() => {
     if (chatScroll === null) {
-      // Already in follow mode, nothing to do
+      // Already in follow mode
     }
   }, [entries, loading]);
 
-  // ── Focus cycling: Tab cycles input → artifacts → chat → input ──
   const cycleFocus = (): void => {
     setFocus((f) => {
       if (f === "input") return "artifacts";
@@ -165,49 +178,48 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onL
     });
   };
 
-  // Global keys (always active)
+  // Global keys
   useInput((input, key) => {
-    if (key.tab) {
-      cycleFocus();
-    }
+    if (key.tab) cycleFocus();
     if (key.escape) {
       if (focus === "artifacts" || focus === "chat") {
         setFocus("input");
       } else {
-        onLeave(); // go back to queue, keep session alive
+        onLeave();
       }
     }
-    // Shift+E = end review (destroy session, mark reviewed)
-    if (input === "E" && focus !== "input") {
-      onEndReview();
-    }
+    if (input === "E" && focus !== "input") onEndReview();
   });
 
-  // Navigation for artifacts pane
-  useInput((input, key) => {
-    if (input === "j" || key.downArrow) setArtifactScroll((s) => Math.min(s + 1, maxArtifactScroll));
-    if (input === "k" || key.upArrow) setArtifactScroll((s) => Math.max(0, s - 1));
-    if (input === "G") setArtifactScroll(maxArtifactScroll);
-    if (input === "g") setArtifactScroll(0);
+  // Tab switching for artifacts pane
+  useInput((input) => {
     if (input === "l") { setActiveTab((t) => (t + 1) % tabs.length); setArtifactScroll(0); }
     if (input === "h") { setActiveTab((t) => (t - 1 + tabs.length) % tabs.length); setArtifactScroll(0); }
     const num = parseInt(input);
     if (!isNaN(num) && num >= 1 && num <= tabs.length) { setActiveTab(num - 1); setArtifactScroll(0); }
   }, { isActive: focus === "artifacts" });
 
-  // Navigation for chat history pane
+  // Artifact content scrolling (non-diff tabs only)
+  useInput((input, key) => {
+    if (input === "j" || key.downArrow) setArtifactScroll((s) => Math.min(s + 1, maxArtifactScroll));
+    if (input === "k" || key.upArrow) setArtifactScroll((s) => Math.max(0, s - 1));
+    if (input === "G") setArtifactScroll(maxArtifactScroll);
+    if (input === "g") setArtifactScroll(0);
+  }, { isActive: focus === "artifacts" && !isDiffTab });
+
+  // Chat history scrolling
   useInput((input, key) => {
     if (input === "j" || key.downArrow) {
       setChatScroll((prev) => {
         const cur = prev ?? maxChatScroll;
         const next = Math.min(cur + 1, maxChatScroll);
-        return next >= maxChatScroll ? null : next; // snap back to follow at bottom
+        return next >= maxChatScroll ? null : next;
       });
     }
     if (input === "k" || key.upArrow) {
       setChatScroll((prev) => Math.max(0, (prev ?? maxChatScroll) - 1));
     }
-    if (input === "G") setChatScroll(null); // follow mode
+    if (input === "G") setChatScroll(null);
     if (input === "g") setChatScroll(0);
   }, { isActive: focus === "chat" });
 
@@ -215,12 +227,10 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onL
     if (!value.trim() || loading) return;
     setEntries((prev) => [...prev, { type: "user", content: value }]);
     setChatInput("");
-    setChatScroll(null); // snap to follow mode on send
+    setChatScroll(null);
     setLoading(true);
     try {
       const response = await api.sendChat(sessionId, value);
-      // REST response is a fallback — WS events should have already populated entries
-      // Only add if nothing was streamed
       setEntries((prev) => {
         let lastUserIdx = -1;
         for (let i = prev.length - 1; i >= 0; i--) {
@@ -239,9 +249,10 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onL
     }
   };
 
-  // Focus indicator text
   const focusHints: Record<FocusMode, string> = {
-    artifacts: "h/l tabs · j/k scroll · g/G top/bottom · E end review",
+    artifacts: isDiffTab
+      ? "h/l tabs · j/k files · Enter expand · c ref-in-chat · E end"
+      : "h/l tabs · j/k scroll · g/G top/bottom · E end review",
     chat: "j/k scroll history · G follow · g top · E end review",
     input: "type message · Enter send",
   };
@@ -270,21 +281,33 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onL
             {i === activeTab ? `▸${tab}` : tab}
           </Text>
         ))}
-        {focus === "artifacts" && artifactLines.length > artifactVisibleHeight && (
+        {focus === "artifacts" && !isDiffTab && artifactLines.length > artifactVisibleHeight && (
           <Text dimColor> [{artifactScroll + 1}-{Math.min(artifactScroll + artifactVisibleHeight, artifactLines.length)}/{artifactLines.length}]</Text>
         )}
       </Box>
 
       {/* Split pane */}
       <Box flexDirection="row" flexGrow={1} width={cols}>
-        {/* Left: Artifacts */}
+        {/* Left: Artifacts / Diff */}
         <Box flexDirection="column" width={halfWidth}>
           <Panel
-            title={artifact?.title ?? "Artifacts"}
+            title={isDiffTab ? "Diff" : (artifact?.title ?? "Artifacts")}
             focused={focus === "artifacts"}
             borderColor={focus === "artifacts" ? "cyan" : "gray"}
           >
-            {artifact ? (
+            {isDiffTab ? (
+              <DiffView
+                files={diffFiles}
+                width={artifactPaneWidth}
+                height={artifactVisibleHeight}
+                isActive={focus === "artifacts" && isDiffTab}
+                onReference={(filePath, hunkText) => {
+                  const ref = "Changes in `" + filePath + "`:\n```diff\n" + hunkText + "\n```";
+                  setChatInput(ref);
+                  setFocus("input");
+                }}
+              />
+            ) : artifact ? (
               <Text>
                 {artifactLines.slice(artifactScroll, artifactScroll + artifactVisibleHeight).join("\n")}
               </Text>
@@ -296,7 +319,6 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onL
 
         {/* Right: Chat + Input */}
         <Box flexDirection="column" width={cols - halfWidth}>
-          {/* Chat history (scrollable) */}
           <Panel
             title={`Chat${chatScroll !== null ? ` [scroll ${effectiveChatScroll + 1}/${allChatLines.length}]` : ""}`}
             focused={focus === "chat"}
@@ -314,7 +336,6 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onL
             </Box>
           </Panel>
 
-          {/* Input area */}
           <Box
             flexDirection="column"
             paddingX={1}

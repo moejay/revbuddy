@@ -167,13 +167,21 @@ export class AnalysisPipeline {
   }
 
   async processItem(item: QueueItem, repo: Repo, localPath: string, workload?: ActiveWorkload): Promise<void> {
+    const itemTag = `[Pipeline ${item.pr.repoId}#${item.pr.number}]`;
+    const itemStartMs = Date.now();
+    console.log(`${itemTag} Starting analysis for "${item.pr.title}"`);
+
     this.queue.updateStatus(item.id, "analyzing");
     this.eventBus.emit("pr:analyzing", { prId: item.pr.id });
 
     const analyzers = this.getEnabledAnalyzers();
+    console.log(`${itemTag} Enabled analyzers: ${analyzers.map((a) => a.id).join(", ")}`);
 
     // Fetch diff
+    console.log(`${itemTag} Fetching diff...`);
+    const diffStartMs = Date.now();
     const diff = await this.provider.getDiff(item.pr.repoId, item.pr.number);
+    console.log(`${itemTag} Diff fetched (${diff.length} chars) in ${Date.now() - diffStartMs}ms`);
     const prWithDiff = { ...item.pr, diff };
 
     const input = {
@@ -186,10 +194,14 @@ export class AnalysisPipeline {
     // Run analyzers
     const allArtifacts: Artifact[] = [];
     if (this.config.parallel) {
+      console.log(`${itemTag} Running ${analyzers.length} analyzers in parallel`);
       const results = await Promise.allSettled(
         analyzers.map(async (a, idx) => {
+          const aStartMs = Date.now();
+          console.log(`${itemTag} [${a.id}] Started`);
           if (workload) workload.currentAnalyzer = a.id;
           const arts = await this.runAnalyzer(a, { ...input, config: this.getAnalyzerConfig(a.id) });
+          console.log(`${itemTag} [${a.id}] Completed in ${Date.now() - aStartMs}ms → ${arts.length} artifact(s)`);
           if (workload) {
             workload.analyzersCompleted++;
             this.eventBus.emit("pipeline:status", this.getStatus());
@@ -201,24 +213,28 @@ export class AnalysisPipeline {
         if (result.status === "fulfilled") {
           allArtifacts.push(...result.value);
         } else {
-          console.error("[Pipeline] Analyzer failed:", result.reason);
+          console.error(`${itemTag} Analyzer failed:`, result.reason);
         }
       }
     } else {
+      console.log(`${itemTag} Running ${analyzers.length} analyzers sequentially`);
       for (const analyzer of analyzers) {
         try {
+          const aStartMs = Date.now();
+          console.log(`${itemTag} [${analyzer.id}] Started`);
           if (workload) workload.currentAnalyzer = analyzer.id;
           const artifacts = await this.runAnalyzer(analyzer, {
             ...input,
             config: this.getAnalyzerConfig(analyzer.id),
           });
+          console.log(`${itemTag} [${analyzer.id}] Completed in ${Date.now() - aStartMs}ms → ${artifacts.length} artifact(s)`);
           allArtifacts.push(...artifacts);
           if (workload) {
             workload.analyzersCompleted++;
             this.eventBus.emit("pipeline:status", this.getStatus());
           }
         } catch (err) {
-          console.error(`[Pipeline] Analyzer "${analyzer.id}" failed:`, err);
+          console.error(`${itemTag} [${analyzer.id}] Failed:`, err);
         }
       }
     }
@@ -227,30 +243,36 @@ export class AnalysisPipeline {
       this.queue.addArtifact(item.id, artifact);
     }
 
+    console.log(`${itemTag} All analyzers done. ${allArtifacts.length} total artifact(s) in ${Date.now() - itemStartMs}ms`);
     this.queue.updateStatus(item.id, "analyzed");
     this.eventBus.emit("pr:analyzed", { prId: item.pr.id, artifactCount: allArtifacts.length });
 
     // Post-analysis
     const postAnalyzers = this.registry.getByType<PostAnalyzer>("post-analyzer");
     if (postAnalyzers.length > 0) {
+      console.log(`${itemTag} Running ${postAnalyzers.length} post-analyzer(s)`);
       this.queue.updateStatus(item.id, "post-analyzing");
       for (const pa of postAnalyzers) {
         try {
+          const paStartMs = Date.now();
+          console.log(`${itemTag} [${pa.id}] Post-analyzer started`);
           const postArtifacts = await pa.process({
             pr: prWithDiff,
             localPath,
             analysisArtifacts: allArtifacts,
             config: {},
           });
+          console.log(`${itemTag} [${pa.id}] Post-analyzer done in ${Date.now() - paStartMs}ms → ${postArtifacts.length} artifact(s)`);
           for (const artifact of postArtifacts) {
             this.queue.addArtifact(item.id, artifact);
           }
         } catch (err) {
-          console.error(`[Pipeline] Post-analyzer "${pa.id}" failed:`, err);
+          console.error(`${itemTag} [${pa.id}] Post-analyzer failed:`, err);
         }
       }
     }
 
+    console.log(`${itemTag} Analysis complete. Total time: ${Date.now() - itemStartMs}ms`);
     this.queue.updateStatus(item.id, "ready");
   }
 
@@ -275,12 +297,30 @@ export class AnalysisPipeline {
 
   private async runAnalyzer(analyzer: Analyzer, input: any): Promise<Artifact[]> {
     const timeout = this.config.timeoutMs ?? 120000;
-    return Promise.race([
-      analyzer.analyze(input),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`Analyzer "${analyzer.id}" timed out`)), timeout)
-      ),
-    ]);
+    const ac = new AbortController();
+
+    const warnTimer = setTimeout(() => {
+      console.warn(`[Pipeline] ⏱ Analyzer "${analyzer.id}" approaching ${timeout}ms timeout — aborting`);
+    }, timeout - 1000);
+
+    const timeoutTimer = setTimeout(() => {
+      ac.abort();
+    }, timeout);
+
+    try {
+      const result = await Promise.race([
+        analyzer.analyze({ ...input, signal: ac.signal }),
+        new Promise<never>((_, reject) => {
+          ac.signal.addEventListener("abort", () => {
+            reject(new Error(`Analyzer "${analyzer.id}" timed out after ${timeout}ms`));
+          });
+        }),
+      ]);
+      return result;
+    } finally {
+      clearTimeout(warnTimer);
+      clearTimeout(timeoutTimer);
+    }
   }
 
   private getAnalyzerConfig(analyzerId: string): Record<string, unknown> {

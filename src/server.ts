@@ -30,7 +30,7 @@ const config: ServerConfig = {
   repoClonePath: process.env.REVBUDDY_CLONE_PATH || "/tmp/revbuddy/repos",
   pipeline: {
     maxConcurrent: Number(process.env.REVBUDDY_MAX_CONCURRENT) || 2,
-    timeoutMs: Number(process.env.REVBUDDY_TIMEOUT) || 180000,
+    timeoutMs: Number(process.env.REVBUDDY_TIMEOUT) || 300000,
   },
   prioritization: {
     sizeFactor: 2,
@@ -82,6 +82,7 @@ async function main(): Promise<void> {
   // ── Restore queue items from persisted state ──────────────
   if (savedState.queue.length > 0) {
     queue.restoreItems(savedState.queue);
+    monitor.seedFromQueue(savedState.queue);
     console.log(`   Restored ${savedState.queue.length} queue items`);
   }
 
@@ -97,9 +98,21 @@ async function main(): Promise<void> {
   eventBus.on("pr:analyzed", persistState);
   eventBus.on("pr:artifact", persistState);
 
+  // ── Handle PR closed events ──────────────────────────────
+  eventBus.on("pr:closed", (event: PREvent) => {
+    console.log(`[Main] PR closed: ${event.repoId}#${event.pr.number}`);
+    queue.close(event.pr.id);
+  });
+
+  // ── Periodic cleanup of expired closed items (every 30 min) ──
+  const cleanupInterval = setInterval(() => {
+    queue.cleanupExpired();
+  }, 30 * 60 * 1000);
+
   // Wire up: monitor events → queue → pipeline (with concurrency control)
   const prEventHandler = async (event: PREvent): Promise<void> => {
     if (event.type === "pr:closed") return;
+    console.log(`[Main] PR event: ${event.type} ${event.repoId}#${event.pr.number} "${event.pr.title}"`);
     const item = queue.enqueue(event.pr);
     if (item.status === "queued") {
       const repo = {
@@ -112,13 +125,20 @@ async function main(): Promise<void> {
         description: "",
       };
       try {
+        console.log(`[Main] Cloning ${event.repoId}...`);
+        const cloneStartMs = Date.now();
         const localRepo = await provider.cloneRepo(event.repoId);
+        console.log(`[Main] Clone ready in ${Date.now() - cloneStartMs}ms → ${localRepo.path}`);
+        console.log(`[Main] Submitting to pipeline (active: ${pipeline.getStatus().active.length}/${pipeline.maxConcurrent})`);
         await pipeline.submit(item, repo, localRepo.path);
         const { score, tier } = prioritize(item, config.prioritization);
         queue.setPriority(item.id, score, tier);
+        console.log(`[Main] Analysis done for ${event.repoId}#${event.pr.number} — priority: ${tier} (${score})`);
       } catch (err) {
-        console.error("[Main] Pipeline error:", err);
+        console.error(`[Main] Pipeline error for ${event.repoId}#${event.pr.number}:`, err);
       }
+    } else {
+      console.log(`[Main] PR ${event.repoId}#${event.pr.number} already in status "${item.status}", skipping`);
     }
   };
 
@@ -148,6 +168,7 @@ async function main(): Promise<void> {
   // Graceful shutdown
   const shutdown = async (): Promise<void> => {
     console.log("\nShutting down...");
+    clearInterval(cleanupInterval);
     monitor.stop();
     persistState();
     await store.flush();

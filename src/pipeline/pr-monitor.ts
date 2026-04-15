@@ -17,9 +17,25 @@ export class PRMonitor {
     private config: PRMonitorConfig
   ) {}
 
+  /**
+   * Seed lastSeen from restored queue items so the first poll
+   * doesn't re-emit pr:created for PRs we already know about.
+   */
+  seedFromQueue(items: Array<{ pr: { repoId: string; number: number; headSha: string } }>): void {
+    for (const item of items) {
+      if (!this.lastSeen.has(item.pr.repoId)) {
+        this.lastSeen.set(item.pr.repoId, new Map());
+      }
+      this.lastSeen.get(item.pr.repoId)!.set(item.pr.number, item.pr.headSha);
+    }
+    console.log(`[PRMonitor] Seeded lastSeen with ${items.length} known PRs`);
+  }
+
   start(): void {
     for (const repoId of this.config.repos) {
-      this.lastSeen.set(repoId, new Map());
+      if (!this.lastSeen.has(repoId)) {
+        this.lastSeen.set(repoId, new Map());
+      }
       this.poll(repoId); // immediate first poll
       const timer = setInterval(() => this.poll(repoId), this.config.pollIntervalMs);
       this.timers.set(repoId, timer);
@@ -94,6 +110,7 @@ export class PRMonitor {
             additions: 0,
             deletions: 0,
             changedFiles: 0,
+            draft: false,
           };
           this.emitEvent("pr:closed", closedPR, repoId);
           seen.delete(prNumber);

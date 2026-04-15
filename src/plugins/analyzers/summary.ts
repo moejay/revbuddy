@@ -20,6 +20,7 @@ export class SummaryAnalyzer implements Analyzer {
     const diff = pr.diff ?? "";
 
     const response = await this.ai.complete({
+      signal: input.signal,
       systemPrompt: `You are a code review assistant. Generate a concise PR summary in markdown format. Include these sections:
 ## Overview
 A 2-3 sentence summary of the changes.

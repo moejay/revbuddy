@@ -113,6 +113,19 @@ export function createServer(deps: ServerDeps) {
     return item;
   });
 
+  // ── REST: Diff ───────────────────────────────────────────
+
+  app.get<{ Params: { itemId: string } }>("/queue/:itemId/diff", async (req, reply) => {
+    const item = queue.get(req.params.itemId);
+    if (!item) return reply.code(404).send({ error: "Not found" });
+    try {
+      const diff = await provider.getDiff(item.pr.repoId, item.pr.number);
+      return { diff };
+    } catch (err: any) {
+      return reply.code(500).send({ error: `Failed to get diff: ${err.message}` });
+    }
+  });
+
   // ── REST: Review Sessions ─────────────────────────────────
 
   app.post<{ Params: { itemId: string } }>("/queue/:itemId/review", async (req, reply) => {
@@ -203,6 +216,17 @@ export function createServer(deps: ServerDeps) {
     const item = queue.get(req.params.itemId);
     if (!item) return reply.code(404).send({ error: "Not found" });
 
+    // Prevent re-analyze if already running
+    const status = pipeline.getStatus();
+    if (status.active.some((w) => w.itemId === item.id)) {
+      return reply.code(409).send({ error: "Analysis already in progress" });
+    }
+
+    // Clear old artifacts and reset status
+    item.artifacts = [];
+    item.analyzedAt = undefined;
+    queue.updateStatus(item.id, "queued");
+
     const repo = {
       id: item.pr.repoId,
       name: item.pr.repoId.split("/")[1],
@@ -213,15 +237,17 @@ export function createServer(deps: ServerDeps) {
       description: "",
     };
 
+    const localPath = config.repoClonePath + "/" + item.pr.repoId.replace("/", "__");
+
     // Run pipeline async
-    pipeline.processItem(item, repo, "/tmp/revbuddy/repos/" + item.pr.repoId.replace("/", "__"))
+    pipeline.processItem(item, repo, localPath)
       .then(() => {
-        const { score, tier } = prioritize(item);
+        const { score, tier } = prioritize(item, config.prioritization);
         queue.setPriority(item.id, score, tier);
       })
-      .catch((err) => console.error("[Server] Pipeline error:", err));
+      .catch((err) => console.error("[Server] Re-analysis error:", err));
 
-    return { ok: true, message: "Analysis started" };
+    return { ok: true, message: "Re-analysis started" };
   });
 
   // ── Manual enqueue ────────────────────────────────────────
