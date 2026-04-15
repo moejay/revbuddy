@@ -177,10 +177,10 @@ export function QueueView({ api, cols, rows, onSelectItem, onStartReview, onMana
                       <Text>{selected ? "▸" : " "}</Text>
                       <PriorityBadge tier={item.priorityTier} />
                       <StatusIndicator status={item.status} />
-                      <Text bold={selected && !isClosed} dimColor={isClosed} color={isClosed ? "gray" : selected ? "cyan" : "white"}>
+                      <Text bold={selected && !isClosed} color={isClosed ? "#888888" : selected ? "cyan" : "white"}>
                         {terminalLink(`#${item.pr.number}`, item.pr.url)}
                       </Text>
-                      <Text bold={selected && !isClosed} dimColor={isClosed} color={isClosed ? "gray" : selected ? "cyan" : "white"} strikethrough={isClosed} wrap="truncate-end">
+                      <Text bold={selected && !isClosed} color={isClosed ? "#888888" : selected ? "cyan" : "white"} strikethrough={isClosed} wrap="truncate-end">
                         {item.pr.title}
                       </Text>
                       <Text dimColor>
