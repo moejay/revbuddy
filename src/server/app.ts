@@ -159,12 +159,17 @@ export function createServer(deps: ServerDeps) {
       const session = sessions.get(req.params.sessionId);
       if (!session) return reply.code(404).send({ error: "Session not found" });
 
-      const stream = await sessions.sendMessage(session.id, req.body.message);
-      const textChunks: string[] = [];
-      for await (const chunk of stream) {
-        if (chunk.type === "text") textChunks.push(chunk.text);
+      try {
+        const stream = await sessions.sendMessage(session.id, req.body.message);
+        const textChunks: string[] = [];
+        for await (const chunk of stream) {
+          if (chunk.type === "text") textChunks.push(chunk.text);
+        }
+        return { response: textChunks.join("") };
+      } catch (err: any) {
+        console.error(`[Server] Chat error for session ${session.id}:`, err.message);
+        return reply.code(500).send({ error: `Chat failed: ${err.message}` });
       }
-      return { response: textChunks.join("") };
     }
   );
 

@@ -197,6 +197,10 @@ export class ClaudeCodeClient implements AIClient {
       env: { ...process.env },
     });
 
+    // Close stdin immediately — message is passed as CLI arg.
+    // Without this, claude may wait for stdin EOF and hang forever.
+    proc.stdin.end();
+
     const rl = createInterface({ input: proc.stdout });
     const lines: string[] = [];
     let done = false;
@@ -231,7 +235,12 @@ export class ClaudeCodeClient implements AIClient {
       }
     });
 
-    proc.stderr.on("data", () => {});
+    const stderrChunks: Buffer[] = [];
+    proc.stderr.on("data", (d) => {
+      stderrChunks.push(d);
+      const msg = d.toString().trim();
+      if (msg) console.log(`[Claude stream pid:${proc.pid}] stderr: ${msg.slice(0, 300)}`);
+    });
 
     // Yield parsed JSON events
     while (true) {
@@ -258,11 +267,15 @@ export class ClaudeCodeClient implements AIClient {
     }
 
     // Wait for process to finish
-    await new Promise<void>((resolve) => {
-      proc.on("close", () => resolve());
-      if (proc.exitCode !== null) resolve();
+    const exitCode = await new Promise<number | null>((resolve) => {
+      proc.on("close", (code) => resolve(code));
+      if (proc.exitCode !== null) resolve(proc.exitCode);
     });
 
     if (error) throw error;
+    if (exitCode !== 0 && exitCode !== null) {
+      const stderrStr = Buffer.concat(stderrChunks).toString();
+      throw new Error(`claude stream exited ${exitCode}: ${stderrStr.slice(0, 500)}`);
+    }
   }
 }
