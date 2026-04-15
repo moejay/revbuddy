@@ -46,19 +46,20 @@ export class ClaudeCodeClient implements AIClient {
 
     const args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"];
 
-    // If we have a claude session ID from a previous turn, resume it
+    let stdinPrompt: string;
     if (session.claudeSessionId) {
+      // Subsequent turns: resume the session, pipe just the new message via stdin
       args.push("--resume", session.claudeSessionId);
+      stdinPrompt = message;
     } else {
-      // First message: include the system context
-      args.push("--append-system-prompt", session.context);
+      // First message: include the full artifact context in the prompt.
+      // Piped via stdin to avoid CLI arg length limits (artifacts can be large).
+      stdinPrompt = `${session.context}\n\n---\n\n${message}`;
     }
-
-    args.push(message);
 
     let hasStreamedText = false;
 
-    for await (const event of this.streamClaude(args, session.cwd)) {
+    for await (const event of this.streamClaude(args, session.cwd, stdinPrompt)) {
       // Capture the claude session ID from init events
       if (event.type === "system" && event.subtype === "init" && event.session_id) {
         session.claudeSessionId = event.session_id;
@@ -190,15 +191,18 @@ export class ClaudeCodeClient implements AIClient {
     });
   }
 
-  private async *streamClaude(args: string[], cwd?: string): AsyncIterable<any> {
+  private async *streamClaude(args: string[], cwd?: string, stdinData?: string): AsyncIterable<any> {
     const proc = spawn("claude", args, {
       stdio: ["pipe", "pipe", "pipe"],
       cwd,
       env: { ...process.env },
     });
 
-    // Close stdin immediately — message is passed as CLI arg.
-    // Without this, claude may wait for stdin EOF and hang forever.
+    // Pipe prompt via stdin and close — avoids CLI arg length limits
+    // and ensures claude doesn't hang waiting for EOF.
+    if (stdinData) {
+      proc.stdin.write(stdinData);
+    }
     proc.stdin.end();
 
     const rl = createInterface({ input: proc.stdout });
