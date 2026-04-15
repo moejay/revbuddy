@@ -180,13 +180,12 @@ export function QueueView({ api, cols, rows, onSelectItem, onStartReview, onMana
                       <Text bold={selected && !isClosed} dimColor={isClosed} color={isClosed ? "gray" : selected ? "cyan" : "white"}>
                         {terminalLink(`#${item.pr.number}`, item.pr.url)}
                       </Text>
-                      <Text bold={selected && !isClosed} dimColor={isClosed} color={isClosed ? "gray" : selected ? "cyan" : "white"} wrap="truncate-end">
+                      <Text bold={selected && !isClosed} dimColor={isClosed} color={isClosed ? "gray" : selected ? "cyan" : "white"} strikethrough={isClosed} wrap="truncate-end">
                         {item.pr.title}
                       </Text>
                       <Text dimColor>
-                        {isClosed
-                          ? `closed ${closedAge}`
-                          : `${item.pr.author} · ${formatTimeAgo(item.pr.createdAt)} · ${item.artifacts.length} artifacts`}
+                        {item.pr.author} · {formatTimeAgo(item.pr.createdAt)}
+                        {isClosed ? ` · closed ${closedAge}` : ` · ${item.artifacts.length} artifacts`}
                       </Text>
                     </Box>
                   );
