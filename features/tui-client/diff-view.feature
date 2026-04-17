@@ -13,10 +13,21 @@ Feature: diff-view
     When the user presses Enter again
     Then the file's diff hunks are hidden
 
-  Scenario: Navigate between file sections
-    Given the diff tab is active showing 3 changed files
+  Scenario: Scroll through expanded diff lines
+    Given the diff tab is active with file "src/foo.ts" expanded
     When the user presses j/k
-    Then the cursor moves between file sections
+    Then the cursor moves line-by-line through the diff content
+    And the viewport scrolls to keep the cursor visible
+
+  Scenario: Jump between file headers
+    Given the diff tab is active showing 3 changed files
+    When the user presses J/K (shift)
+    Then the cursor jumps to the next/previous file header
+
+  Scenario: Half-page scroll with Ctrl-d/u
+    Given the diff tab is active with a large expanded file
+    When the user presses Ctrl-d
+    Then the cursor moves down by half the viewport height
 
   Scenario: Color-code diff lines
     Given a file section is expanded in the diff view

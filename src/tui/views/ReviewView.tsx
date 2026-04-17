@@ -251,7 +251,7 @@ export function ReviewView({ item, sessionId, worktreePath, api, cols, rows, onL
 
   const focusHints: Record<FocusMode, string> = {
     artifacts: isDiffTab
-      ? "h/l tabs · j/k files · Enter expand · c ref-in-chat · E end"
+      ? "h/l tabs · j/k lines · J/K files · Enter expand · c ref-in-chat · E end"
       : "h/l tabs · j/k scroll · g/G top/bottom · E end review",
     chat: "j/k scroll history · G follow · g top · E end review",
     input: "type message · Enter send",
