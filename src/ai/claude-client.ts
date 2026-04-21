@@ -3,12 +3,30 @@ import { createInterface } from "node:readline";
 import { nanoid } from "nanoid";
 import type { AIClient, AICompletionRequest, AICompletionResponse, StreamChunk } from "../core/types.js";
 
+export interface ClaudeClientOptions {
+  skipPermissions?: boolean;
+}
+
 export class ClaudeCodeClient implements AIClient {
   // Map our session ID → claude session ID (UUID from init message)
   private sessions = new Map<string, { claudeSessionId?: string; context: string; cwd?: string }>();
+  private skipPermissions: boolean;
+
+  constructor(options: ClaudeClientOptions = {}) {
+    this.skipPermissions = options.skipPermissions ?? false;
+    if (this.skipPermissions) {
+      console.log("[Claude] ⚠ Running with --dangerously-skip-permissions");
+    }
+  }
+
+  private baseArgs(): string[] {
+    const args = ["-p"];
+    if (this.skipPermissions) args.push("--dangerously-skip-permissions");
+    return args;
+  }
 
   async complete(request: AICompletionRequest): Promise<AICompletionResponse> {
-    const args = ["-p", "--output-format", "json"];
+    const args = [...this.baseArgs(), "--output-format", "json"];
     if (request.systemPrompt) {
       args.push("--system-prompt", request.systemPrompt);
     }
@@ -44,7 +62,7 @@ export class ClaudeCodeClient implements AIClient {
       throw new Error(`Session "${sessionId}" not found`);
     }
 
-    const args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"];
+    const args = [...this.baseArgs(), "--output-format", "stream-json", "--verbose", "--include-partial-messages"];
 
     let stdinPrompt: string;
     if (session.claudeSessionId) {

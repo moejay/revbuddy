@@ -43,7 +43,9 @@ const config: ServerConfig = {
 async function main(): Promise<void> {
   const registry = new PluginRegistry();
   const eventBus = new EventBus();
-  const aiClient = new ClaudeCodeClient();
+  const aiClient = new ClaudeCodeClient({
+    skipPermissions: process.env.REVBUDDY_SKIP_PERMISSIONS === "true" || process.env.REVBUDDY_SKIP_PERMISSIONS === "1",
+  });
   const store = new StateStore();
 
   // ── Load persisted state ──────────────────────────────────
