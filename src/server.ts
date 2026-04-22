@@ -111,6 +111,22 @@ async function main(): Promise<void> {
     queue.cleanupExpired();
   }, 30 * 60 * 1000);
 
+  // ── Periodic checks refresh (every 2 min) ──
+  const refreshChecks = async (): Promise<void> => {
+    const items = queue.getAll().filter((i) => i.status !== "closed" && i.status !== "reviewed");
+    if (items.length === 0) return;
+    console.log(`[Checks] Refreshing CI status for ${items.length} item(s)`);
+    for (const item of items) {
+      try {
+        item.pr.checks = await provider.getChecks(item.pr.repoId, item.pr.number);
+      } catch {}
+    }
+    eventBus.emit("queue:updated", queue.getAll());
+  };
+  // Initial fetch after a short delay, then every 2 min
+  setTimeout(refreshChecks, 5000);
+  const checksInterval = setInterval(refreshChecks, 2 * 60 * 1000);
+
   // Wire up: monitor events → queue → pipeline (with concurrency control)
   const prEventHandler = async (event: PREvent): Promise<void> => {
     if (event.type === "pr:closed") return;
@@ -171,6 +187,7 @@ async function main(): Promise<void> {
   const shutdown = async (): Promise<void> => {
     console.log("\nShutting down...");
     clearInterval(cleanupInterval);
+    clearInterval(checksInterval);
     monitor.stop();
     persistState();
     await store.flush();

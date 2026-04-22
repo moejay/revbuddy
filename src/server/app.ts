@@ -126,6 +126,20 @@ export function createServer(deps: ServerDeps) {
     }
   });
 
+  // ── REST: Checks ─────────────────────────────────────────
+
+  app.get<{ Params: { itemId: string } }>("/queue/:itemId/checks", async (req, reply) => {
+    const item = queue.get(req.params.itemId);
+    if (!item) return reply.code(404).send({ error: "Not found" });
+    try {
+      const checks = await provider.getChecks(item.pr.repoId, item.pr.number);
+      item.pr.checks = checks;
+      return checks;
+    } catch (err: any) {
+      return reply.code(500).send({ error: `Failed to get checks: ${err.message}` });
+    }
+  });
+
   // ── REST: Review Sessions ─────────────────────────────────
 
   app.post<{ Params: { itemId: string } }>("/queue/:itemId/review", async (req, reply) => {

@@ -7,6 +7,7 @@ import type {
   Repo,
   PullRequest,
   PRFilter,
+  PRChecks,
   LocalRepo,
   Worktree,
 } from "../../core/types.js";
@@ -93,6 +94,27 @@ export class GitHubProvider implements GitProvider {
       results = results.filter((pr: PullRequest) => !pr.draft);
     }
     return results;
+  }
+
+  async getChecks(repoId: string, prNumber: number): Promise<PRChecks> {
+    try {
+      const json = await gh([
+        "pr", "checks", String(prNumber),
+        "--repo", repoId,
+        "--json", "bucket",
+      ]);
+      const checks: Array<{ bucket: string }> = JSON.parse(json || "[]");
+      const result: PRChecks = { total: checks.length, pass: 0, fail: 0, pending: 0, skipping: 0 };
+      for (const c of checks) {
+        if (c.bucket === "pass") result.pass++;
+        else if (c.bucket === "fail" || c.bucket === "cancel") result.fail++;
+        else if (c.bucket === "pending") result.pending++;
+        else if (c.bucket === "skipping") result.skipping++;
+      }
+      return result;
+    } catch {
+      return { total: 0, pass: 0, fail: 0, pending: 0, skipping: 0 };
+    }
   }
 
   async getDiff(repoId: string, prNumber: number): Promise<string> {

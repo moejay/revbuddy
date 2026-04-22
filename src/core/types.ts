@@ -61,6 +61,15 @@ export interface PullRequest {
   changedFiles: number;
   draft: boolean;
   diff?: string;
+  checks?: PRChecks;
+}
+
+export interface PRChecks {
+  total: number;
+  pass: number;
+  fail: number;
+  pending: number;
+  skipping: number;
 }
 
 export interface PRFilter {
@@ -76,6 +85,7 @@ export interface GitProvider extends Plugin {
   getPR(repoId: string, prNumber: number): Promise<PullRequest>;
   listPRs(repoId: string, filters?: PRFilter): Promise<PullRequest[]>;
   getDiff(repoId: string, prNumber: number): Promise<string>;
+  getChecks(repoId: string, prNumber: number): Promise<PRChecks>;
   cloneRepo(repoId: string, destination: string): Promise<LocalRepo>;
   createWorktree(localRepo: LocalRepo, branch: string): Promise<Worktree>;
   destroyWorktree(worktree: Worktree): Promise<void>;

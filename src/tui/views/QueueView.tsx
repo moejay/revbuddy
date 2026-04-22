@@ -3,9 +3,20 @@ import { Box, Text, useInput, useApp } from "ink";
 import { Panel } from "../components/Box.js";
 import { PriorityBadge } from "../components/PriorityBadge.js";
 import { StatusIndicator } from "../components/StatusIndicator.js";
-import type { QueueItem } from "../../core/types.js";
+import type { QueueItem, PRChecks } from "../../core/types.js";
 import type { APIClient } from "../api-client.js";
 import { terminalLink, openInBrowser } from "../utils.js";
+
+function ChecksBadge({ checks }: { checks?: PRChecks }): React.ReactElement | null {
+  if (!checks || checks.total === 0) return null;
+  if (checks.fail > 0) {
+    return <Text color="red">✗ {checks.fail}/{checks.total}</Text>;
+  }
+  if (checks.pending > 0) {
+    return <Text color="yellow">⏳ {checks.pass}/{checks.total}</Text>;
+  }
+  return <Text color="green">✓ {checks.pass}/{checks.total}</Text>;
+}
 
 function formatTimeAgo(isoDate: string): string {
   const ms = Date.now() - new Date(isoDate).getTime();
@@ -183,6 +194,7 @@ export function QueueView({ api, cols, rows, onSelectItem, onStartReview, onMana
                       <Text bold={selected && !isClosed} color={isClosed ? "#888888" : selected ? "cyan" : "white"} strikethrough={isClosed} wrap="truncate-end">
                         {item.pr.title}
                       </Text>
+                      <ChecksBadge checks={item.pr.checks} />
                       <Text dimColor>
                         {item.pr.author} · {formatTimeAgo(item.pr.createdAt)}
                         {isClosed ? ` · closed ${closedAge}` : ` · ${item.artifacts.length} artifacts`}
